@@ -183,13 +183,12 @@ def get_context_for_agents(query: str) -> str:
 # ============================================================
 # TESTING
 # ============================================================
+def retrieve_reviews(query, top_k=5):
+    query_embedding = model.encode([query])
+    D, I = index.search(query_embedding, top_k)
 
-if __name__ == "__main__":
-    user_query = input("\nEnter your search query: ")
+    results = []
+    for idx in I[0]:
+        results.append(metadata[idx])
 
-    results = retrieve_reviews(user_query)
-
-    print("\nTop Results:\n")
-    for r in results:
-        print(r)
-        print("-" * 80)
+    return results
