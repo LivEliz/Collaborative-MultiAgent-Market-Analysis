@@ -5,7 +5,7 @@ from collections import Counter
 # -----------------------------
 # Load Agent Output
 # -----------------------------
-with open("agent_output.json") as f:
+with open("insight_engine/agent_output.json") as f:
     data = json.load(f)
 
 trends = data["trends"]
