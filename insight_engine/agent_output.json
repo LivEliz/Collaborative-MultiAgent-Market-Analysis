@@ -1,0 +1,18 @@
+{
+ "trends": ["battery life good", "camera weak", "fast delivery"],
+ "sentiment_summary": {
+   "positive": "5",
+   "negative": "1",
+   "neutral": "2"
+ },
+ "competitor_insights": [
+   {
+     "brand": "BrandX",
+     "insight": "cheaper alternative"
+   }
+ ],
+ "recommendations": [
+   "Improve packaging",
+   "Maintain battery performance"
+ ]
+}
