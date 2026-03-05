@@ -5,3 +5,5 @@ sentence-transformers
 crewai
 langchain-community
 ollama
+streamlit
+plotly
