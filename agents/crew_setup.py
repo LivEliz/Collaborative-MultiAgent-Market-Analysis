@@ -1,4 +1,4 @@
-from crewai import Crew
+from crewai import Crew, Process
 from agents.agents import (
     trend_analyst,
     sentiment_analyst,
@@ -19,7 +19,9 @@ def create_crew(user_query):
             report_generator
         ],
         tasks=tasks,
-        verbose=True
+        process=Process.sequential,
+        verbose=True,
+        max_iterations=3
     )
 
     return crew

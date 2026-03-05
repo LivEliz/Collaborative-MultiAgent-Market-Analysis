@@ -10,7 +10,6 @@ import pandas as pd
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-
 # ============================================================
 # PATH SETUP
 # ============================================================
@@ -22,14 +21,13 @@ RAG_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_PATH = os.path.join(RAG_DIR, "faiss_index.index")
 METADATA_PATH = os.path.join(RAG_DIR, "metadata.pkl")
 
-
 # ============================================================
 # CONFIGURATION
 # ============================================================
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 CHUNK_SIZE = 200
-
+TOP_K_MULTIPLIER = 3
 
 # ============================================================
 # LOAD MODEL (Only once)
@@ -38,18 +36,19 @@ CHUNK_SIZE = 200
 print("Loading embedding model...")
 model = SentenceTransformer(MODEL_NAME)
 
-
 # ============================================================
 # CHUNKING FUNCTION
 # ============================================================
 
 def chunk_text(text, chunk_size=CHUNK_SIZE):
     words = text.split()
-    return [" ".join(words[i:i+chunk_size]) for i in range(0, len(words), chunk_size)]
-
+    return [
+        " ".join(words[i:i + chunk_size])
+        for i in range(0, len(words), chunk_size)
+    ]
 
 # ============================================================
-# BUILD INDEX (ONLY IF NOT EXISTS)
+# BUILD INDEX
 # ============================================================
 
 def build_index():
@@ -73,11 +72,17 @@ def build_index():
                 "date": row["date"]
             })
 
+    if len(documents) == 0:
+        raise ValueError("No documents found for indexing.")
+
     embeddings = model.encode(documents, show_progress_bar=True)
     embeddings = np.array(embeddings).astype("float32")
 
+    # 🔥 Normalize for cosine similarity
+    faiss.normalize_L2(embeddings)
+
     dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
+    index = faiss.IndexFlatIP(dimension)
     index.add(embeddings)
 
     faiss.write_index(index, INDEX_PATH)
@@ -89,9 +94,8 @@ def build_index():
 
     return index, metadata
 
-
 # ============================================================
-# LOAD EXISTING INDEX
+# LOAD INDEX
 # ============================================================
 
 def load_index():
@@ -103,7 +107,6 @@ def load_index():
 
     return index, metadata
 
-
 # ============================================================
 # INITIALIZE SYSTEM
 # ============================================================
@@ -112,7 +115,6 @@ if os.path.exists(INDEX_PATH) and os.path.exists(METADATA_PATH):
     index, metadata = load_index()
 else:
     index, metadata = build_index()
-
 
 # ============================================================
 # MAIN RETRIEVAL FUNCTION (CrewAI Ready)
@@ -126,26 +128,29 @@ def retrieve_reviews(
 ):
     """
     Retrieve relevant review chunks with optional metadata filtering.
-
-    Parameters:
-        query (str): User search query
-        top_k (int): Number of results to return
-        min_rating (float): Filter by minimum rating
-        category (str): Filter by category
-
-    Returns:
-        List[dict]: Retrieved results with metadata
+    Returns list of dicts.
     """
 
     query_embedding = model.encode([query])
     query_embedding = np.array(query_embedding).astype("float32")
 
-    distances, indices = index.search(query_embedding, top_k * 3)
+    # 🔥 Normalize query for cosine similarity
+    faiss.normalize_L2(query_embedding)
+
+    distances, indices = index.search(query_embedding, top_k * TOP_K_MULTIPLIER)
 
     results = []
+    seen_texts = set()
 
     for idx in indices[0]:
+        if idx < 0:
+            continue
+
         item = metadata[idx]
+
+        # Remove duplicates
+        if item["text"] in seen_texts:
+            continue
 
         if min_rating is not None and item["rating"] < min_rating:
             continue
@@ -154,41 +159,27 @@ def retrieve_reviews(
             continue
 
         results.append(item)
+        seen_texts.add(item["text"])
 
         if len(results) >= top_k:
             break
 
     return results
 
-
 # ============================================================
-# CREWAI INTEGRATION FUNCTION
+# CREWAI CONTEXT FUNCTION
 # ============================================================
 
-def get_context_for_agents(query: str) -> str:
-    """
-    Returns formatted context string for LLM agents.
-    """
-
+def get_context_for_agents(query: str):
     results = retrieve_reviews(query, top_k=5)
 
     context = "\n\n".join(
-        [f"Product: {r['product_name']}\nRating: {r['rating']}\nReview: {r['text']}"
-         for r in results]
+        [
+            f"Product: {r['product_name']}\n"
+            f"Rating: {r['rating']}\n"
+            f"Review: {r['text']}"
+            for r in results
+        ]
     )
 
     return context
-
-
-# ============================================================
-# TESTING
-# ============================================================
-def retrieve_reviews(query, top_k=5):
-    query_embedding = model.encode([query])
-    D, I = index.search(query_embedding, top_k)
-
-    results = []
-    for idx in I[0]:
-        results.append(metadata[idx])
-
-    return results

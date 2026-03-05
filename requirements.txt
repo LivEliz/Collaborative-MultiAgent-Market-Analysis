@@ -3,4 +3,5 @@ numpy
 faiss-cpu
 sentence-transformers
 crewai
-openai
+langchain-community
+ollama
