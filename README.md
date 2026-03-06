@@ -1,71 +1,71 @@
-Collaborative Multi-Agent Market Analysis System
+# Collaborative Multi-Agent Market Analysis System
 
-Project Overview
+A professional browser-based market intelligence platform powered by a Collaborative Multi-Agent System (CrewAI) and Retrieval-Augmented Generation (RAG). This system transforms large-scale raw product reviews into actionable business insights using local, open-source intelligence.
 
-This project implements a collaborative multi-agent market analysis system using CrewAI and Retrieval-Augmented Generation (RAG). The system analyzes large-scale product reviews and generates structured business insights to support data-driven decision-making.
-The architecture combines embedding-based retrieval with specialized AI agents to extract trends, sentiment, competitor insights, and recommendations.
+## 🔄 Project Architecture
 
-System Architecture
+The system follows a 5-step engineering pipeline:
 
-Phase 1: Data Engineering
+1.  **Data Collection & Preprocessing**: Automated ingestion and cleaning of reviews (Pandas, NLP).
+2.  **RAG Pipeline**: Vectorization of knowledge using SentenceTransformers and retrieval via FAISS.
+3.  **Multi-Agent Collaborative System**: Four specialized CrewAI agents (Trend, Sentiment, Competitor, and Report) collaborating on a shared context.
+4.  **Business Intelligence Layer**: Analysis of agent outputs into SWOT grids, trend scores, and risk alerts.
+5.  **Interactive Dashboard**: A custom-built Streamlit interface with a pastel glassmorphism aesthetic.
 
-Cleaned and preprocessed Amazon reviews dataset
+---
 
-Structured review data for analysis
+## 👥 Responsibility Breakdown
 
-Removed duplicates and irrelevant entries
+| Member | Role | Key Technologies |
+| :--- | :--- | :--- |
+| **Member 1** | Data Engineer | Python, Pandas, NLTK/spaCy |
+| **Member 2** | RAG Engineer | FAISS, SentenceTransformers |
+| **Member 3** | Multi-Agent Architect | CrewAI, LangChain |
+| **Member 4** | Insight Engineer | Data Analytics, Plotly |
+| **Member 5** | Frontend & Deployment | Streamlit, CSS |
 
+---
 
-Phase 2: RAG System
+## 🚀 Getting Started
 
-SentenceTransformers-based embeddings
+### Prerequisites
+- Python 3.9+
+- (Optional) Ollama (for live local LLM execution)
 
-FAISS vector database for similarity search
+### Installation
+1. Clone the repository
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-Metadata filtering (rating, category, etc.)
+### Running the System
+Run the dashboard locally using:
+```bash
+python -m streamlit run app.py
+```
 
-CrewAI-ready retrieval API
+---
 
+## 🛠 Features
 
-Phase 3: Multi-Agent Analysis
+### Simulation Mode (Presentation Ready)
+The system includes a **Simulation Mode** that allows for instant demonstrations without requiring a running LLM instance. It uses pre-computed analysis to show the full capability of the multi-agent collaboration and visualization engine.
 
-Using CrewAI, specialized agents perform:
+### Advanced Visualization
+- **Dynamic Sentiment Tracking**: Responsive donut charts visualizing emotional distribution.
+- **Micro-Trend Extraction**: Real-time keyword frequency analysis using local embeddings.
+- **SWOT Analysis**: Automatically generated grid classifying Strengths, Weaknesses, Opportunities, and Threats.
 
-Trend analysis
+### Privacy-First Intelligence
+The entire system operates **locally**. No data is sent to external APIs (like OpenAI or Gemini). It utilizes high-performance local models for embeddings and agentic logic, ensuring data privacy and cost-efficiency.
 
-Sentiment classification
+---
 
-Competitor insight extraction
-
-Structured business report generation
-
-Tech Stack
-
-Python
-
-CrewAI
-
-FAISS
-
-SentenceTransformers
-
-Streamlit (for UI)
-
-Ollama (local LLM support)
-
-
-Features
--Retrieval-Augmented Generation (RAG) pipeline
-
--Multi-agent collaborative analysis
-
--Structured JSON output
-
--Streamlit-based interactive UI
-
--Downloadable analysis reports
-
--Local LLM support via Ollama
-
-Scalable architecture
+## 🎨 Design Aesthetic
+The dashboard features a **Premium Pastel UI** with:
+- Glassmorphism components for an airy, modern feel.
+- Custom Outfit typography for high-end readability.
+- Animated pastel gradients to enhance user engagement.
+- A fully unbranded, professional finish suitable for corporate presentations.
 
