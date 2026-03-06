@@ -14,15 +14,9 @@ The system follows a 5-step engineering pipeline:
 
 ---
 
-## Responsibility Breakdown
+## Team Members
 
-| Member | Role | Key Technologies |
-| :--- | :--- | :--- |
-| **Member 1** | Data Engineer | Python, Pandas, NLTK/spaCy |
-| **Member 2** | RAG Engineer | FAISS, SentenceTransformers |
-| **Member 3** | Multi-Agent Architect | CrewAI, LangChain |
-| **Member 4** | Insight Engineer | Data Analytics, Plotly |
-| **Member 5** | Frontend & Deployment | Streamlit, CSS |
+- MINTA MARIYA BENNY, NEHA BENNY, NEHA K S, OLIVIA C B, REN JOE, RITU FRANKLIN, ROSE LIZ MARTIN
 
 ---
 
