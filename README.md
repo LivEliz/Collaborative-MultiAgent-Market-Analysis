@@ -2,7 +2,7 @@
 
 A professional browser-based market intelligence platform powered by a Collaborative Multi-Agent System (CrewAI) and Retrieval-Augmented Generation (RAG). This system transforms large-scale raw product reviews into actionable business insights using local, open-source intelligence.
 
-## 🔄 Project Architecture
+## Project Architecture
 
 The system follows a 5-step engineering pipeline:
 
@@ -14,7 +14,7 @@ The system follows a 5-step engineering pipeline:
 
 ---
 
-## 👥 Responsibility Breakdown
+## Responsibility Breakdown
 
 | Member | Role | Key Technologies |
 | :--- | :--- | :--- |
@@ -26,7 +26,7 @@ The system follows a 5-step engineering pipeline:
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Python 3.9+
@@ -47,7 +47,7 @@ python -m streamlit run app.py
 
 ---
 
-## 🛠 Features
+## Features
 
 ### Simulation Mode (Presentation Ready)
 The system includes a **Simulation Mode** that allows for instant demonstrations without requiring a running LLM instance. It uses pre-computed analysis to show the full capability of the multi-agent collaboration and visualization engine.
@@ -62,7 +62,7 @@ The entire system operates **locally**. No data is sent to external APIs (like O
 
 ---
 
-## 🎨 Design Aesthetic
+## Design Aesthetic
 The dashboard features a **Premium Pastel UI** with:
 - Glassmorphism components for an airy, modern feel.
 - Custom Outfit typography for high-end readability.
