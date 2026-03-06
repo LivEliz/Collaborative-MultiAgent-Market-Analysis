@@ -26,11 +26,11 @@ METADATA_PATH = os.path.join(RAG_DIR, "metadata.pkl")
 # ============================================================
 
 MODEL_NAME = "all-MiniLM-L6-v2"
-CHUNK_SIZE = 200
-TOP_K_MULTIPLIER = 3
+CHUNK_SIZE = 120
+TOP_K_MULTIPLIER = 5
 
 # ============================================================
-# LOAD MODEL (Only once)
+# LOAD EMBEDDING MODEL
 # ============================================================
 
 print("Loading embedding model...")
@@ -41,18 +41,19 @@ model = SentenceTransformer(MODEL_NAME)
 # ============================================================
 
 def chunk_text(text, chunk_size=CHUNK_SIZE):
-    words = text.split()
+    words = str(text).split()
     return [
         " ".join(words[i:i + chunk_size])
         for i in range(0, len(words), chunk_size)
     ]
 
 # ============================================================
-# BUILD INDEX
+# BUILD FAISS INDEX
 # ============================================================
 
 def build_index():
-    print("Building FAISS index from scratch...")
+
+    print("Building FAISS index...")
 
     df = pd.read_csv(DATA_PATH)
 
@@ -60,28 +61,39 @@ def build_index():
     metadata = []
 
     for _, row in df.iterrows():
-        chunks = chunk_text(str(row["review_text"]))
+
+        # Use rag_text for better semantic embedding
+        base_text = str(row["rag_text"])
+
+        chunks = chunk_text(base_text)
 
         for chunk in chunks:
+
             documents.append(chunk)
+
             metadata.append({
                 "text": chunk,
                 "product_name": row["product_name"],
-                "rating": row["rating"],
                 "category": row["category"],
-                "date": row["date"]
+                "rating": row["rating"],
+                "price": row["price"],
+                "review_title": row["review_title"],
+                "helpful_votes": row["helpful_votes"],
+                "recommended": row["recommended"],
+                "review_date": row["review_date"]
             })
 
     if len(documents) == 0:
-        raise ValueError("No documents found for indexing.")
+        raise ValueError("No documents available for indexing.")
 
     embeddings = model.encode(documents, show_progress_bar=True)
     embeddings = np.array(embeddings).astype("float32")
 
-    # 🔥 Normalize for cosine similarity
+    # Normalize for cosine similarity
     faiss.normalize_L2(embeddings)
 
     dimension = embeddings.shape[1]
+
     index = faiss.IndexFlatIP(dimension)
     index.add(embeddings)
 
@@ -90,16 +102,18 @@ def build_index():
     with open(METADATA_PATH, "wb") as f:
         pickle.dump(metadata, f)
 
-    print("Index built and saved successfully!")
+    print("FAISS index built successfully")
 
     return index, metadata
 
 # ============================================================
-# LOAD INDEX
+# LOAD EXISTING INDEX
 # ============================================================
 
 def load_index():
-    print("Loading existing FAISS index...")
+
+    print("Loading FAISS index...")
+
     index = faiss.read_index(INDEX_PATH)
 
     with open(METADATA_PATH, "rb") as f:
@@ -112,44 +126,42 @@ def load_index():
 # ============================================================
 
 if os.path.exists(INDEX_PATH) and os.path.exists(METADATA_PATH):
+
     index, metadata = load_index()
+
 else:
+
     index, metadata = build_index()
 
 # ============================================================
-# MAIN RETRIEVAL FUNCTION (CrewAI Ready)
+# REVIEW RETRIEVAL
 # ============================================================
 
 def retrieve_reviews(
-    query: str,
-    top_k: int = 5,
-    min_rating: float = None,
-    category: str = None
+        query: str,
+        top_k: int = 5,
+        min_rating: float = None,
+        category: str = None
 ):
-    """
-    Retrieve relevant review chunks with optional metadata filtering.
-    Returns list of dicts.
-    """
 
     query_embedding = model.encode([query])
     query_embedding = np.array(query_embedding).astype("float32")
 
-    # 🔥 Normalize query for cosine similarity
     faiss.normalize_L2(query_embedding)
 
     distances, indices = index.search(query_embedding, top_k * TOP_K_MULTIPLIER)
 
     results = []
-    seen_texts = set()
+    seen = set()
 
     for idx in indices[0]:
+
         if idx < 0:
             continue
 
         item = metadata[idx]
 
-        # Remove duplicates
-        if item["text"] in seen_texts:
+        if item["text"] in seen:
             continue
 
         if min_rating is not None and item["rating"] < min_rating:
@@ -159,7 +171,7 @@ def retrieve_reviews(
             continue
 
         results.append(item)
-        seen_texts.add(item["text"])
+        seen.add(item["text"])
 
         if len(results) >= top_k:
             break
@@ -167,19 +179,36 @@ def retrieve_reviews(
     return results
 
 # ============================================================
-# CREWAI CONTEXT FUNCTION
+# CONTEXT BUILDER FOR CREWAI
 # ============================================================
 
 def get_context_for_agents(query: str):
+
     results = retrieve_reviews(query, top_k=5)
 
-    context = "\n\n".join(
-        [
-            f"Product: {r['product_name']}\n"
-            f"Rating: {r['rating']}\n"
-            f"Review: {r['text']}"
-            for r in results
-        ]
-    )
+    context_blocks = []
+
+    for i, r in enumerate(results, 1):
+
+        block = f"""
+---------------- REVIEW {i} ----------------
+
+Product Name: {r['product_name']}
+Category: {r['category']}
+Price: {r['price']}
+Rating: {r['rating']}
+Review Title: {r['review_title']}
+Helpful Votes: {r['helpful_votes']}
+Recommended: {r['recommended']}
+
+Customer Review:
+{r['text']}
+
+-------------------------------------------
+"""
+
+        context_blocks.append(block)
+
+    context = "\n".join(context_blocks)
 
     return context

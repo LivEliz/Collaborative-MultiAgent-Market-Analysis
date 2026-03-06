@@ -1,5 +1,7 @@
 from agents.crew_setup import create_crew
 import json
+import os
+
 
 if __name__ == "__main__":
 
@@ -9,9 +11,24 @@ if __name__ == "__main__":
 
     result = crew.kickoff()
 
-    print("\n\nFINAL OUTPUT:\n")
-    print(result)
+    print("\nFINAL OUTPUT:\n")
 
-    # Save output for Insight Engine
+    # CrewAI returns CrewOutput object
+    final_output = result.raw
+
+    print(final_output)
+
+    # Convert JSON string to dictionary safely
+    try:
+        output_json = json.loads(final_output)
+    except:
+        output_json = {"raw_output": final_output}
+
+    # Ensure directory exists
+    os.makedirs("insight_engine", exist_ok=True)
+
+    # Save output
     with open("insight_engine/agent_output.json", "w") as f:
-        json.dump(result, f, indent=4)
+        json.dump(output_json, f, indent=4)
+
+    print("\nOutput saved to insight_engine/agent_output.json")

@@ -15,47 +15,59 @@ def build_tasks(user_query):
     # ==========================
     retrieved_reviews = retrieve_reviews(user_query)
 
-    # Remove duplicate reviews
     unique_reviews = list({r["text"]: r for r in retrieved_reviews}.values())
-    context_text = "\n\n".join([r["text"] for r in unique_reviews])
+
+    context_text = "\n\n".join([
+        f"""
+Product: {r['product_name']}
+Rating: {r['rating']}
+
+Review:
+{r['text']}
+"""
+        for r in unique_reviews
+    ])
 
     # ==========================
     # STEP 1 — Trend Analysis
     # ==========================
     trend_task = Task(
         description=f"""
-    Extract ONLY observable trends from the reviews.
+Analyze the following product reviews and extract observable trends.
 
-    STRICT RULES:
-    - Use ONLY the reviews provided.
-    - Do NOT use external knowledge.
-    - Identify:
-      - Product strengths
-      - Product weaknesses
-      - Recurring issues
-      - Pricing/value perceptions
-      - Customer satisfaction patterns
-    - If no trend exists, return empty list.
-    - No explanations.
-    - No extra text.
+Use ONLY the information present in the reviews.
 
-    Return result in STRICT JSON format:
+Identify:
 
-    {{
-      "strengths": [],
-      "weaknesses": [],
-      "recurring_issues": [],
-      "pricing_perception": [],
-      "customer_satisfaction_patterns": []
-    }}
+1. Product strengths
+2. Product weaknesses
+3. Recurring issues mentioned by multiple customers
+4. Pricing or value perceptions
+5. Customer satisfaction patterns
 
-    USER QUERY:
-    {user_query}
+Rules:
+- Do NOT add outside knowledge
+- Extract short factual points
+- Each point must be under 12 words
+- If no data exists for a section return empty list
 
-    REVIEWS:
-    {context_text}
-    """,
-        expected_output="Structured JSON trends.",
+Return ONLY valid JSON using this schema:
+
+{{
+  "strengths": [],
+  "weaknesses": [],
+  "recurring_issues": [],
+  "pricing_perception": [],
+  "customer_satisfaction_patterns": []
+}}
+
+USER QUERY:
+{user_query}
+
+REVIEWS:
+{context_text}
+""",
+        expected_output="Valid JSON containing trend categories.",
         output_format="json",
         agent=trend_analyst
     )
@@ -65,29 +77,24 @@ def build_tasks(user_query):
     # ==========================
     sentiment_task = Task(
         description="""
-Based ONLY on the trends generated.
-
-Return sentiment counts in STRICT JSON format.
-
-Return exactly this structure:
-
-{
-  "positive": "count",
-  "negative": "count",
-  "neutral": "count"
-}
-
-example:
-positive: 5
-negative: 1
-neutral: 2
+Analyze the trends extracted from reviews and determine overall sentiment.
 
 Rules:
-- No explanations.
-- No markdown.
-- Return JSON only.
+- Count positive observations
+- Count negative observations
+- Count neutral observations
+- Return numeric values
+
+Return ONLY valid JSON:
+
+{
+  "positive": 0,
+  "negative": 0,
+  "neutral": 0
+}
 """,
-        expected_output="Valid sentiment JSON.",
+        expected_output="Valid sentiment JSON with numeric values.",
+        output_format="json",
         agent=sentiment_analyst,
         context=[trend_task]
     )
@@ -97,18 +104,14 @@ Rules:
     # ==========================
     competitor_task = Task(
         description="""
-Based ONLY on trends.
+Identify competitor brands explicitly mentioned in the reviews.
 
-Extract competitor insights.
+Rules:
+- Only include brands directly mentioned in reviews
+- Do NOT infer competitors
+- If none mentioned return empty list
 
-STRICT RULES:
-- Include only explicitly mentioned brands.
-- Do NOT invent brands.
-- If none mentioned, return empty list [].
-- No speculation.
-- Return JSON format.
-
-Return structure:
+Return JSON format:
 
 [
   {
@@ -117,7 +120,8 @@ Return structure:
   }
 ]
 """,
-        expected_output="Valid competitor JSON list.",
+        expected_output="List of competitor insights in JSON.",
+        output_format="json",
         agent=competitor_analyst,
         context=[trend_task]
     )
@@ -127,36 +131,47 @@ Return structure:
     # ==========================
     report_task = Task(
         description="""
-Generate FINAL REPORT in STRICT VALID JSON.
+Generate the final structured business insights report.
 
-VERY IMPORTANT:
-- Return ONLY JSON.
-- No markdown.
-- No explanations.
-- No extra text.
-- Double quotes only.
-- Must match schema exactly.
-- Generate 2–4 actionable business recommendations based strictly on trends and sentiment.
+Use outputs from:
+- Trend analysis
+- Sentiment analysis
+- Competitor analysis
 
-If any section has no data, return empty list or empty strings.
+Rules:
+- Return ONLY JSON
+- No markdown
+- No explanations
+- Generate 2–4 actionable recommendations
 
-FINAL SCHEMA:
+Schema must match exactly:
 
 {
-  "trends": [],
+  "trends": {
+    "strengths": [],
+    "weaknesses": [],
+    "recurring_issues": [],
+    "pricing_perception": [],
+    "customer_satisfaction_patterns": []
+  },
   "sentiment_summary": {
-    "positive": "",
-    "negative": "",
-    "neutral": ""
+    "positive": 0,
+    "negative": 0,
+    "neutral": 0
   },
   "competitor_insights": [],
   "recommendations": []
 }
 """,
-        expected_output="Strict valid JSON only.",
+        expected_output="Final structured report JSON.",
         output_format="json",
         agent=report_generator,
         context=[trend_task, sentiment_task, competitor_task]
     )
 
-    return [trend_task, sentiment_task, competitor_task, report_task]
+    return [
+        trend_task,
+        sentiment_task,
+        competitor_task,
+        report_task
+    ]

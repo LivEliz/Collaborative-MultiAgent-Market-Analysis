@@ -1,122 +1,205 @@
 import plotly.graph_objects as go
-import plotly.express as px
 from collections import Counter
+import re
+
 
 def generate_insights(data):
     """
-    Takes the structured JSON output from the CrewAI agents and returns 
-    processed insights and Plotly chart objects for the Streamlit frontend.
+    Converts CrewAI agent JSON output into:
+    - Metrics
+    - SWOT
+    - Plotly charts
+    for Streamlit dashboard
     """
+
+    # ---------------------------------
+    # Extract fields safely
+    # ---------------------------------
     trends = data.get("trends", [])
-    sentiment = data.get("sentiment_summary", {"positive": 0, "negative": 0, "neutral": 0})
+    sentiment = data.get("sentiment_summary", {})
     competitors = data.get("competitor_insights", [])
     recommendations = data.get("recommendations", [])
 
-    # Convert sentiment to integers safely
-    try:
-        positive = int(sentiment.get("positive", 0))
-    except ValueError:
-        positive = 0
-    try:
-        negative = int(sentiment.get("negative", 0))
-    except ValueError:
-        negative = 0
-    try:
-        neutral = int(sentiment.get("neutral", 0))
-    except ValueError:
-        neutral = 0
+    # ---------------------------------
+    # FIX: Ensure trends is always a list
+    # ---------------------------------
+    if isinstance(trends, dict):
+        trends = list(trends.values())
+    elif isinstance(trends, set):
+        trends = list(trends)
+    elif isinstance(trends, str):
+        trends = [trends]
+    elif trends is None:
+        trends = []
 
-    # -----------------------------
-    # Trend Score Calculation
-    # -----------------------------
-    # Normalize between -100 to 100 based on total
+    # ---------------------------------
+    # FIX: Flatten nested lists
+    # ---------------------------------
+    flat_trends = []
+    for t in trends:
+        if isinstance(t, list):
+            flat_trends.extend([str(x) for x in t])
+        else:
+            flat_trends.append(str(t))
+
+    trends = flat_trends
+
+    # ---------------------------------
+    # Convert sentiment to integers
+    # ---------------------------------
+    def safe_int(value):
+        try:
+            return int(value)
+        except:
+            return 0
+
+    positive = safe_int(sentiment.get("positive"))
+    negative = safe_int(sentiment.get("negative"))
+    neutral = safe_int(sentiment.get("neutral"))
+
     total = positive + negative + neutral
+
+    # ---------------------------------
+    # Trend Score
+    # ---------------------------------
     if total > 0:
         trend_score = round(((positive - negative) / total) * 100)
     else:
         trend_score = 0
 
-    # -----------------------------
-    # Sentiment Donut Chart (Plotly)
-    # -----------------------------
-    labels = ["Positive", "Negative", "Neutral"]
-    values = [positive, negative, neutral]
-    colors = ["#a8e6cf", "#ffb6b9", "#dcedc1"]  # Soft Pastel Mint, Pink, Pale Green
-
-    fig_sentiment = go.Figure(data=[go.Pie(
-        labels=labels, 
-        values=values, 
-        hole=.65,
-        marker=dict(colors=colors, line=dict(color='#ffffff', width=4)),
-        textinfo='percent',
-        hoverinfo='label+percent+value',
-        textfont=dict(color='#475569', family='Outfit', size=14)
-    )])
-    
-    fig_sentiment.update_layout(
-        showlegend=False,
-        margin=dict(t=0, b=0, l=0, r=0),
-        paper_bgcolor='rgba(0,0,0,0)',
-        plot_bgcolor='rgba(0,0,0,0)',
-        annotations=[dict(text=f'<b>{total}</b><br><span style="font-size:12px;color:#94a3b8;">REVIEWS</span>', x=0.5, y=0.5, font_size=32, showarrow=False, font_color='#475569', font_family='Outfit')]
+    # ---------------------------------
+    # Sentiment Donut Chart
+    # ---------------------------------
+    fig_sentiment = go.Figure(
+        data=[
+            go.Pie(
+                labels=["Positive", "Negative", "Neutral"],
+                values=[positive, negative, neutral],
+                hole=0.65,
+                textinfo="percent",
+                marker=dict(
+                    colors=["#a8e6cf", "#ffb6b9", "#dcedc1"],
+                    line=dict(color="white", width=3),
+                ),
+            )
+        ]
     )
 
-    # -----------------------------
-    # Keyword Frequency Chart (Plotly)
-    # -----------------------------
+    fig_sentiment.update_layout(
+        margin=dict(t=0, b=0, l=0, r=0),
+        showlegend=False,
+        paper_bgcolor="rgba(0,0,0,0)",
+        annotations=[
+            dict(
+                text=f"<b>{total}</b><br>Reviews",
+                x=0.5,
+                y=0.5,
+                showarrow=False,
+                font=dict(size=28),
+            )
+        ],
+    )
+
+    # ---------------------------------
+    # Keyword Frequency Chart
+    # ---------------------------------
     fig_keywords = None
+
     if trends:
-        all_text = " ".join(trends).lower()
-        stopwords = {'the', 'a', 'to', 'and', 'is', 'in', 'it', 'for', 'of', 'on', 'with', 'this', 'that', 'are', 'was', 'as', 'at', 'be', 'but', 'not'}
-        words = [w for w in all_text.split() if w not in stopwords and len(w) > 3]
-        
+
+        combined_text = " ".join(trends).lower()
+
+        # remove punctuation
+        combined_text = re.sub(r"[^\w\s]", "", combined_text)
+
+        stopwords = {
+            "the", "is", "a", "to", "and", "for", "of", "on",
+            "with", "this", "that", "was", "are", "very"
+        }
+
+        words = [
+            w for w in combined_text.split()
+            if w not in stopwords and len(w) > 3
+        ]
+
         if words:
+
             freq = Counter(words).most_common(8)
-            kw_labels = [item[0] for item in freq]
-            kw_values = [item[1] for item in freq]
-            
-            fig_keywords = go.Figure(data=[go.Bar(
-                x=kw_labels,
-                y=kw_values,
-                marker=dict(
-                    color=kw_values,
-                    colorscale=[[0, '#add8e6'], [1, '#ffb6c1']], # Pastel Blue to Pastel Pink Gradient
-                ),
-                marker_line_width=0,
-                opacity=0.9,
-                text=kw_values,
-                textposition='outside',
-                textfont=dict(color='#475569', family='Outfit', size=13)
-            )])
-            
-            fig_keywords.update_layout(
-                margin=dict(t=30, b=20, l=0, r=0),
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)',
-                font=dict(color='#475569', family='Outfit'),
-                xaxis=dict(showgrid=False, linecolor='rgba(0,0,0,0.1)', tickfont=dict(size=12)),
-                yaxis=dict(showgrid=True, gridcolor='rgba(0,0,0,0.05)', linecolor='rgba(0,0,0,0)', showticklabels=False),
+
+            labels = [x[0] for x in freq]
+            values = [x[1] for x in freq]
+
+            fig_keywords = go.Figure(
+                data=[
+                    go.Bar(
+                        x=labels,
+                        y=values,
+                        text=values,
+                        textposition="outside",
+                        marker=dict(
+                            color=values,
+                            colorscale="Blues"
+                        )
+                    )
+                ]
             )
 
-    # -----------------------------
-    # SWOT Analysis Grid
-    # -----------------------------
+            fig_keywords.update_layout(
+                margin=dict(t=30, b=10),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                yaxis=dict(showgrid=True),
+            )
+
+    # ---------------------------------
+    # SWOT Analysis
+    # ---------------------------------
+    half = max(1, len(trends) // 2)
+
+    strengths = trends[:half] if trends else ["Positive customer feedback"]
+    weaknesses = trends[half:] if len(trends) > 1 else ["Minor usability issues"]
+
+    opportunities = recommendations if recommendations else [
+        "Improve product differentiation"
+    ]
+
+    threats = []
+    for c in competitors:
+        if isinstance(c, dict) and "brand" in c:
+            threats.append(c["brand"])
+
+    if not threats:
+        threats = ["Low-cost competitors entering market"]
+
     swot = {
-        "Strengths": trends[:max(1, len(trends)//2)] if trends else ["Consistent reliability noted"],
-        "Weaknesses": trends[max(1, len(trends)//2):] if len(trends) > 1 else ["Some connectivity issues mentioned"],
-        "Opportunities": recommendations if recommendations else ["Expand product ecosystem integration"],
-        "Threats": [c["brand"] for c in competitors] if competitors else ["Emerging budget-friendly alternatives"]
+        "Strengths": strengths,
+        "Weaknesses": weaknesses,
+        "Opportunities": opportunities,
+        "Threats": threats,
     }
 
-    # -----------------------------
-    # Market Positioning & Rick Alerts
-    # -----------------------------
-    market_position = f"Score: {trend_score}/100 | Detected {len(competitors)} major competitors in context."
-    risk_alert = "High negative sentiment spike detected!" if negative > positive else None
+    # ---------------------------------
+    # Risk Detection
+    # ---------------------------------
+    risk_alert = None
 
-    # -----------------------------
-    # Return structured insights for frontend
-    # -----------------------------
+    if negative > positive:
+        risk_alert = "Negative sentiment exceeding positive feedback."
+
+    if negative >= 5:
+        risk_alert = "Critical issue detected: High negative sentiment spike."
+
+    # ---------------------------------
+    # Market Position Summary
+    # ---------------------------------
+    market_position = (
+        f"Trend Score: {trend_score}/100 | "
+        f"Competitors Mentioned: {len(competitors)}"
+    )
+
+    # ---------------------------------
+    # Return structured insights
+    # ---------------------------------
     return {
         "trend_score": trend_score,
         "swot_analysis": swot,
