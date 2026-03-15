@@ -1,163 +1,156 @@
-# ==============================================
-# STEP 1: IMPORT LIBRARIES
-# ==============================================
-
 import pandas as pd
-import numpy as np
-import os
 import json
+from transformers import pipeline
+from rag_pipeline import RAGPipeline
+from agents import data_engineer, retriever, sentiment_analyst, insights_agent
+from crewai import Crew, Task
+
+# -----------------------------
+# Load reviews from CSV
+# -----------------------------
+df = pd.read_csv("data/cleaned_reviews.csv")
+
+# Use the 'review_text' column instead of 'review'
+reviews = df['review_text'].dropna().tolist()
+
+# -----------------------------
+# Initialize RAG pipeline
+# -----------------------------
+rag = RAGPipeline()
+rag.embed_and_store(reviews)
+
+# -----------------------------
+# HuggingFace sentiment model
+# -----------------------------
+sentiment_pipeline = pipeline("sentiment-analysis")
+
+def analyze_sentiment(texts):
+    results = sentiment_pipeline(texts)
+    pos, neg, neu = 0, 0, 0
+    for r in results:
+        label = r['label'].lower()
+        if "positive" in label:
+            pos += 1
+        elif "negative" in label:
+            neg += 1
+        else:
+            neu += 1
+    total = len(results)
+    return {
+        "positive": round(pos/total*100, 2),
+        "negative": round(neg/total*100, 2),
+        "neutral": round(neu/total*100, 2)
+    }
+
+# -----------------------------
+# Keyword extraction & trends
+# -----------------------------
+from collections import Counter
+import re
+import spacy
+nlp = spacy.load("en_core_web_sm")
+
+# Basic stopword list (you can expand this)
+STOPWORDS = {
+    "the","and","for","this","that","with","have","was","are","but","not","you",
+    "she","he","they","will","has","had","would","good","great","tablet","amazon"
+}
+
+def extract_keywords(context, top_n=5):
+    text = " ".join(context).lower()
+    doc = nlp(text)
+    words = [token.lemma_ for token in doc if token.pos_ in {"NOUN","ADJ"} and token.text not in STOPWORDS]
+    common = Counter(words).most_common(top_n)
+    return [w for w, _ in common]
+
+def generate_trends(keywords):
+    trends = []
+    for kw in keywords:
+        if "battery" in kw:
+            trends.append("Battery life is a recurring concern")
+        elif "sound" in kw or "audio" in kw:
+            trends.append("Sound quality is highly valued")
+        elif "price" in kw or "cost" in kw or "value" in kw:
+            trends.append("Affordability influences customer satisfaction")
+        elif "quality" in kw:
+            trends.append("Build quality is a key factor")
+        else:
+            trends.append(f"Customers frequently mention {kw}")
+    return trends
 
 
-# ==============================================
-# STEP 2: LOAD DATASET
-# ==============================================
+def generate_recommendations(sentiment, trends):
+    recs = []
+    if sentiment["negative"] > 30:
+        recs.append("Address common complaints in product design")
+    if sentiment["positive"] > 50:
+        recs.append("Highlight strengths in marketing campaigns")
+    for t in trends:
+        if "battery" in t:
+            recs.append("Invest in improving battery performance")
+        elif "sound" in t:
+            recs.append("Emphasize sound quality in promotions")
+    return recs
 
-file_path = os.path.join("data", "amazon_raw.csv")
-
-if not os.path.exists(file_path):
-    raise FileNotFoundError(
-        "amazon_raw.csv not found. Please place the dataset in this folder."
-    )
-
-df = pd.read_csv(file_path)
-
-print("\nDataset Loaded Successfully")
-print("Shape:", df.shape)
-
-
-# ==============================================
-# STEP 3: HELPER FUNCTION TO EXTRACT PRICE
-# ==============================================
-
-def extract_price(price_json):
-    try:
-        prices = json.loads(price_json.replace("'", '"'))
-        if isinstance(prices, list) and len(prices) > 0:
-            return prices[0].get("amountMax", None)
-    except:
-        return None
-    return None
+# -----------------------------
+# Generate structured insights
+# -----------------------------
+def generate_insights(query, context, sentiment):
+    keywords = extract_keywords(context)
+    trends = generate_trends(keywords)
+    recs = generate_recommendations(sentiment, trends)
+    return {
+        "query": query,
+        "sentiment_summary": sentiment,
+        "sample_context": context[:5],  # show first 5 reviews
+        "market_trends": trends,
+        "recommendations": recs
+    }
 
 
-# ==============================================
-# STEP 4: DATA CLEANING
-# ==============================================
+# -----------------------------
+# CrewAI orchestration
+# -----------------------------
+task_retrieve = Task(
+    agent=retriever,
+    description="Retrieve relevant reviews",
+    expected_output="Relevant product reviews from FAISS index"
+)
 
-print("\nCleaning dataset...")
+task_sentiment = Task(
+    agent=sentiment_analyst,
+    description="Analyze sentiment of retrieved reviews",
+    expected_output="Sentiment summary with percentages of positive, negative, neutral"
+)
 
-# Keep original text
-df["review_text"] = df["reviews.text"].fillna("").astype(str)
+task_insights = Task(
+    agent=insights_agent,
+    description="Generate market insights",
+    expected_output="Structured JSON with trends and actionable recommendations"
+)
 
-# Review title
-df["review_title"] = df["reviews.title"].fillna("").astype(str)
-
-# Product name
-df["product_name"] = df["name"].fillna("Unknown Product")
-
-# Rating
-df["rating"] = pd.to_numeric(df["reviews.rating"], errors="coerce")
-
-# Helpful votes
-df["helpful_votes"] = pd.to_numeric(df["reviews.numHelpful"], errors="coerce").fillna(0)
-
-# Recommendation flag
-df["recommended"] = df["reviews.doRecommend"].fillna(False)
-
-# Date
-df["review_date"] = pd.to_datetime(df["reviews.date"], errors="coerce")
-
-# User location
-df["user_city"] = df["reviews.userCity"].fillna("Unknown")
-df["user_province"] = df["reviews.userProvince"].fillna("Unknown")
-
-# Username
-df["username"] = df["reviews.username"].fillna("Anonymous")
-
-# Category
-df["category"] = df["categories"].str.split(",").str[0].fillna("Unknown")
-
-# Extract price
-df["price"] = df["prices"].apply(lambda x: extract_price(str(x)))
-
-# Weight
-df["weight"] = df["weight"].fillna("Unknown")
-
-# UPC
-df["upc"] = df["upc"].fillna("Unknown")
-
-
-# ==============================================
-# STEP 5: REMOVE USELESS ROWS
-# ==============================================
-
-# Remove rows with empty review text
-df = df[df["review_text"].str.strip() != ""]
-
-# Remove duplicates
-df = df.drop_duplicates(subset=["review_text"])
-
-print("After cleaning shape:", df.shape)
-
-
-# ==============================================
-# STEP 6: CREATE TEXT FIELD FOR RAG
-# ==============================================
-
-# Combine fields for embedding context
-df["rag_text"] = (
-    "Product: " + df["product_name"] +
-    ". Rating: " + df["rating"].astype(str) +
-    ". Title: " + df["review_title"] +
-    ". Review: " + df["review_text"]
+crew = Crew(
+    agents=[data_engineer, retriever, sentiment_analyst, insights_agent],
+    tasks=[task_retrieve, task_sentiment, task_insights]
 )
 
 
-# ==============================================
-# STEP 7: SELECT IMPORTANT COLUMNS
-# ==============================================
+crew = Crew(
+    agents=[data_engineer, retriever, sentiment_analyst, insights_agent],
+    tasks=[task_retrieve, task_sentiment, task_insights]
+)
 
-cleaned_df = df[
-    [
-        "product_name",
-        "category",
-        "price",
-        "rating",
-        "review_title",
-        "review_text",
-        "rag_text",
-        "helpful_votes",
-        "recommended",
-        "review_date",
-        "user_city",
-        "user_province",
-        "username",
-        "weight",
-        "upc"
-    ]
-]
+def collaborative_analysis(query):
+    context = rag.retrieve(query)
+    sentiment = analyze_sentiment(context)
+    insights = generate_insights(query, context, sentiment)
+    return insights
 
+# -----------------------------
+# Run the pipeline
+# -----------------------------
+if __name__ == "__main__":
+    user_query = input("Enter your product query: ")
+    result = collaborative_analysis(user_query)
+    print(json.dumps(result, indent=2))
 
-# ==============================================
-# STEP 8: SAVE CLEAN DATASET
-# ==============================================
-
-output_file = "cleaned_reviews.csv"
-
-cleaned_df.to_csv(output_file, index=False)
-
-print("\ncleaned_reviews.csv saved successfully")
-
-
-# ==============================================
-# STEP 9: DATA SUMMARY
-# ==============================================
-
-print("\nDataset Summary")
-print("Total reviews:", len(cleaned_df))
-print("Products:", cleaned_df["product_name"].nunique())
-print("Categories:", cleaned_df["category"].nunique())
-print("Average rating:", cleaned_df["rating"].mean())
-print("Price range:", cleaned_df["price"].min(), "-", cleaned_df["price"].max())
-
-
-print("\nData preprocessing completed")
